@@ -5,6 +5,7 @@ import axios from 'axios';
 
 //to define the properties of the task
 interface Task {
+  _id: string;
   title: string;
   editing: boolean;
 }
@@ -13,23 +14,74 @@ interface Task {
 const newTask = ref('');
 const taskList = ref<Task[]>([]);
 
+//function to add the task, use reference below for function declaration (this one cannot post into database)
+// const addTask = () => {
+//   if (newTask.value) {
+//     taskList.value.push({
+//       title: newTask.value,
+//       editing: false,
+//       _id: '',
+//     });
+//     newTask.value = '';
+//   }
+// };
+
 //function to add the task, use reference below for function declaration
-const addTask = () => {
+const addTask = async () => {
   if (newTask.value) {
-    taskList.value.push({ title: newTask.value, editing: false });
-    newTask.value = '';
+    const taskData = {
+      title: newTask.value,
+    };
+    try {
+      const response = await axios.post(
+        'http://localhost:3001/tasks',
+        taskData
+      );
+      taskList.value.push(response.data);
+      newTask.value = '';
+      location.reload();
+    } catch (error) {
+      console.error(error);
+    }
   }
 };
 
+//function to delete the task (will not update in database)
+// function deleteTask(index: number) {
+//   taskList.value.splice(index, 1);
+// }
+
 //function to delete the task
-function deleteTask(index: number) {
-  taskList.value.splice(index, 1);
+async function deleteTask(index: number, taskId: string) {
+  if (confirm('Are you sure you want to delete this task?')) {
+    try {
+      await axios.delete(`http://localhost:3001/tasks/${taskId}`);
+      taskList.value.splice(index, 1);
+      location.reload();
+    } catch (error) {
+      console.error(error);
+    }
+  }
 }
 
+//function to update the task (will not update in the database)
+// function editTask(index: number, newTitle: string) {
+//   taskList.value[index].title = newTitle;
+//   taskList.value[index].editing = false;
+// }
+
 //function to update the task
-function editTask(index: number, newTitle: string) {
-  taskList.value[index].title = newTitle;
-  taskList.value[index].editing = false;
+async function editTask(index: number, newTitle: string, taskId: string) {
+  try {
+    await axios.put(`http://localhost:3001/tasks/${taskId}`, {
+      title: newTitle,
+    });
+    taskList.value[index].title = newTitle;
+    taskList.value[index].editing = false;
+    location.reload();
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 function toggleEdit(index: number) {
@@ -37,8 +89,11 @@ function toggleEdit(index: number) {
 }
 
 // const { data } = await useFetch(() => 'localhost:3001/tasks');
-const { data: tasks } = await useAsyncData('task', () =>
-  $fetch('localhost:3001/tasks')
+// const { data: tasks } = await useAsyncData('task', () =>
+//   $fetch('localhost:3001/tasks')
+// );
+const { data: tasks, pending } = await useFetch<Task[]>(
+  'http://localhost:3001/tasks'
 );
 </script>
 
@@ -73,37 +128,38 @@ const { data: tasks } = await useAsyncData('task', () =>
         <h3>Task List</h3>
         <ul class="ml-5">
           <!-- the task will be printed from the array in a list form -->
-          <li v-for="(task, index) in taskList" :key="index">
-            <div v-if="!task.editing" class="border-b-2 border-teal-500">
-              <span class="mr-2">{{ index + 1 }}.</span>
-              <span>{{ task.title }}</span>
-              <!-- button to edit the task -->
+          <div v-if="!pending">
+            <li v-for="(task, index) in tasks" :key="task._id">
+              <span class="mr-2">{{ index + 1 }}. </span>
+              <input
+                type="text"
+                v-model="task.title"
+                :disabled="!task.editing"
+              />
               <button
+                v-if="!task.editing"
                 class="px-4 py-2 m-4 font-bold text-white bg-green-600 rounded"
-                @click="toggleEdit(index)"
+                @click="task.editing = true"
               >
                 Edit
               </button>
-              <!-- button to delete the task  -->
+              <button
+                v-else
+                class="px-4 py-2 m-4 font-bold text-white bg-blue-600 rounded"
+                @click="editTask(index, task.title, task._id)"
+              >
+                Save
+              </button>
+
               <button
                 class="px-4 py-2 font-bold text-white bg-red-600 rounded"
-                @click="deleteTask(index)"
+                @click="deleteTask(index, task._id)"
               >
                 Delete
               </button>
-            </div>
-            <div v-else>
-              <input
-                type="text"
-                class="w-full px-2 py-1 border-b-2 border-gray-200 focus:outline-none focus:border-y-teal-950"
-                v-model="task.title"
-                @keydown.enter="editTask(index, task.title)"
-                @blur="editTask(index, task.title)"
-              />
-            </div>
-          </li>
+            </li>
+          </div>
         </ul>
-        <div v-if="tasks">{{ tasks }}</div>
       </div>
     </div>
   </div>
